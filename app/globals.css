@@ -66,7 +66,6 @@ button { cursor: pointer; }
 }
 .topbar nav button:hover, .topbar nav button.active { color: var(--gold-soft); border-color: var(--gold); }
 .topbar nav span { font-size: 12px; }
-.checkpoint { border: 1px solid var(--gold); border-radius: 10px; color: var(--gold-soft); padding: 10px 14px; font-weight: 700; }
 .hero-content { position: relative; z-index: 1; max-width: 940px; margin: 22px auto 0; text-align: center; padding: 0 24px 44px; }
 .eyebrow { text-transform: uppercase; letter-spacing: .2em; font-size: 11px; color: var(--gold-soft); margin: 0 0 10px; }
 h1 { font-family: Georgia, "Times New Roman", serif; font-size: clamp(42px, 5vw, 68px); line-height: 1.04; font-weight: 500; margin: 0 0 26px; }
@@ -80,6 +79,8 @@ h1 em { color: var(--gold-soft); font-style: normal; }
 .search input { width: 100%; height: 56px; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 22px; }
 .search kbd { color: #7b7d82; border: 1px solid #c9c5bd; border-radius: 7px; padding: 5px 8px; font-size: 12px; }
 .search button { width: 56px; height: 56px; border-radius: 13px; border: 0; color: white; background: linear-gradient(135deg, #d8b66e, #ad7823); font-size: 30px; }
+.hero-ai-button { margin: 14px auto 0; border: 1px solid rgba(206,163,80,.7); border-radius: 999px; padding: 10px 17px; background: rgba(16,33,29,.54); color: #fff5dc; font-weight: 800; letter-spacing: .02em; }
+.hero-ai-button span { margin-right: 7px; color: var(--gold-soft); }
 .metrics { display: flex; justify-content: center; gap: 46px; margin-top: 28px; }
 .metrics div { min-width: 190px; display: grid; grid-template-columns: 50px auto; text-align: left; align-items: center; column-gap: 12px; }
 .metrics div + div { border-left: 1px solid var(--gold); padding-left: 46px; }
@@ -283,17 +284,46 @@ footer a { color: var(--gold-soft); text-decoration: none; font-size: 12px; }
 .office-grid h3 { margin-top: 8px; }
 .office-grid p { min-height: 66px; color: #d9e0dc; font-size: 13px; line-height: 1.55; }
 .office-grid a { color: var(--gold-soft); font-weight: 700; font-size: 11px; text-decoration: none; }
-.floating-whatsapp {
+.address-list { margin: 15px 0 18px; display: grid; }
+.address-list div { display: grid; grid-template-columns: 72px 1fr; gap: 10px; padding: 7px 0; border-bottom: 1px solid rgba(249,247,239,.12); }
+.address-list dt { color: var(--gold-soft); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+.address-list dd { margin: 0; color: #e7ece9; font-size: 12px; line-height: 1.35; }
+.floating-hayat {
   position: fixed; right: 22px; bottom: 22px; z-index: 20; min-height: 50px; padding: 0 9px 0 17px;
-  display: flex; align-items: center; gap: 12px; border-radius: 999px; background: #5b7758; color: white;
-  text-decoration: none; box-shadow: 0 10px 28px rgba(16,33,29,.28); font-size: 12px; font-weight: 700;
+  display: flex; align-items: center; gap: 12px; border: 1px solid #d3a34d; border-radius: 999px; background: #16352d; color: white;
+  box-shadow: 0 10px 28px rgba(16,33,29,.32); font-size: 12px; font-weight: 800;
 }
-.floating-whatsapp b { width: 34px; height: 34px; border-radius: 50%; background: rgba(255,255,255,.15); display: grid; place-items: center; }
+.floating-hayat b { width: 34px; height: 34px; border-radius: 50%; background: var(--gold); color: #10211d; display: grid; place-items: center; }
+.chat-backdrop { position: fixed; inset: 0; z-index: 50; background: rgba(4,15,12,.42); display: flex; justify-content: flex-end; align-items: stretch; padding: 18px; }
+.hayat-chat { width: min(450px, 100%); height: 100%; max-height: 820px; align-self: end; display: grid; grid-template-rows: auto 1fr auto auto; overflow: hidden; border: 1px solid #c9aa65; border-radius: 18px; background: #f9f7ef; box-shadow: 0 24px 70px rgba(4,15,12,.35); }
+.hayat-chat > header { padding: 16px 18px; background: #16352d; color: white; display: flex; justify-content: space-between; align-items: center; }
+.hayat-chat > header > div { display: flex; align-items: center; gap: 11px; }
+.hayat-chat > header > div > div { display: grid; gap: 2px; }
+.hayat-chat > header small { color: #cbd7d1; font-size: 10px; }
+.hayat-chat > header button { width: 34px; height: 34px; border: 1px solid rgba(255,255,255,.2); border-radius: 50%; background: transparent; color: white; font-size: 23px; }
+.hayat-avatar { width: 38px; height: 38px; border-radius: 50%; background: var(--gold); color: #10211d; display: grid; place-items: center; font-family: Georgia, serif; font-size: 20px; font-weight: 800; }
+.chat-messages { overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+.chat-message { max-width: 88%; padding: 12px 14px; border-radius: 13px; background: white; border: 1px solid #ded6c8; color: var(--ink); }
+.chat-message.user { align-self: flex-end; background: #16352d; border-color: #16352d; color: white; }
+.chat-message > span { color: #a06b1d; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+.chat-message.user > span { color: var(--gold-soft); }
+.chat-message p { margin: 6px 0 0; font-size: 13px; line-height: 1.55; white-space: pre-wrap; }
+.chat-figures { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
+.chat-figures div { padding: 8px; border-radius: 7px; background: #fff6e2; display: grid; gap: 3px; }
+.chat-figures small { color: var(--muted); font-size: 8px; }
+.chat-figures strong { color: #8d5e18; font-size: 13px; }
+.chat-evidence { display: block; margin-top: 9px; color: #6c7c73; font-size: 8px; overflow-wrap: anywhere; }
+.chat-message.typing { color: var(--muted); }
+.chat-form { padding: 12px 14px; border-top: 1px solid #ded6c8; display: grid; grid-template-columns: 1fr auto; gap: 8px; background: white; }
+.chat-form textarea { resize: none; border: 1px solid #cfc5b5; border-radius: 10px; padding: 10px 12px; color: var(--ink); font: inherit; font-size: 12px; outline: none; }
+.chat-form textarea:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(206,163,80,.16); }
+.chat-form button { border: 0; border-radius: 9px; padding: 0 15px; background: var(--gold); color: #10211d; font-weight: 800; }
+.chat-form button:disabled { opacity: .45; }
+.chat-disclaimer { padding: 0 14px 12px; background: white; color: var(--muted); font-size: 8px; line-height: 1.4; }
 
 @media (max-width: 980px) {
   .brand-name { font-size: 21px; }
   .topbar nav { display: none; }
-  .checkpoint { margin-left: auto; }
   .metrics { gap: 12px; }
   .ai-figures { grid-template-columns: repeat(2, 1fr); }
   .ai-columns { grid-template-columns: 1fr; }
@@ -349,8 +379,10 @@ footer a { color: var(--gold-soft); text-decoration: none; font-size: 12px; }
   .office-grid { grid-template-columns: 1fr; }
   .office-grid p { min-height: 0; }
   footer { flex-direction: column; }
-  .floating-whatsapp span { display: none; }
-  .floating-whatsapp { width: 52px; padding: 0; justify-content: center; }
+  .floating-hayat span { display: none; }
+  .floating-hayat { width: 52px; padding: 0; justify-content: center; }
+  .chat-backdrop { padding: 0; }
+  .hayat-chat { width: 100%; max-height: 100%; border-radius: 0; }
 }
 
 @media (prefers-reduced-motion: no-preference) {
