@@ -18,6 +18,12 @@ type AiAnswer = {
   language: "en" | "ar";
 };
 
+type ChatMessage = {
+  role: "user" | "assistant";
+  text: string;
+  answer?: AiAnswer;
+};
+
 const detailProfiles = [
   {
     terms: ["commission", "broker fee", "agency fee", "agent fee", "brokerage fee"],
@@ -77,7 +83,7 @@ const detailProfiles = [
     ],
   },
   {
-    terms: ["sale fee", "transfer fee", "sale registration", "buy property fee", "property transfer"],
+    terms: ["dld rate", "dld fee", "dld transfer fee", "dld registration fee", "sale fee", "transfer fee", "sale registration", "buy property fee", "property transfer"],
     title: "Property sale registration",
     summary:
       "Dubai property-sale registration is normally charged at 4% of the sale value. The official service breakdown commonly allocates 2% to the seller and 2% to the purchaser, although the parties’ agreement may determine who ultimately bears the cost.",
@@ -177,6 +183,37 @@ const detailProfiles = [
     ],
   },
 ];
+
+function profileForQuery(query: string) {
+  const value = query.toLowerCase().replace(/[^\p{L}\p{N}%]+/gu, " ").trim();
+  const ranked = detailProfiles
+    .map((item) => ({
+      item,
+      score: item.terms.reduce((score, term) => {
+        if (value.includes(term)) return score + term.split(" ").length * 10;
+        const termWords = term.split(" ");
+        return score + termWords.filter((word) => value.includes(word)).length * 2;
+      }, 0),
+    }))
+    .sort((a, b) => b.score - a.score);
+  return ranked[0]?.score > 0 ? ranked[0].item : null;
+}
+
+function profileEvidenceText(profile: (typeof detailProfiles)[number]) {
+  return [
+    `DIRECT CONTROLLED ANSWER: ${profile.summary}`,
+    `ACTUAL FIGURES:\n${profile.figures.map(([label, value]) => `- ${label}: ${value}`).join("\n")}`,
+    `CONDITIONS:\n${profile.conditions.map((condition) => `- ${condition}`).join("\n")}`,
+    `EXAMPLES:\n${profile.examples.map(([label, value]) => `- ${label}: ${value}`).join("\n")}`,
+    `OFFICIAL CHANNELS:\n${profile.sources.map(([label, url]) => `- ${label}: ${url}`).join("\n")}`,
+  ].join("\n\n");
+}
+
+function preferredDocumentIds(profile: (typeof detailProfiles)[number] | null) {
+  if (!profile) return new Set<string>();
+  if (profile.title === "Property sale registration") return new Set(["SRC-DLD-WEB-0051", "SRC-DLD-GDE-0003"]);
+  return new Set<string>();
+}
 
 const topicRules: Record<string, string[]> = {
   Sales: ["sales", "transfer", "booking", "contract"],
@@ -365,6 +402,12 @@ export default function Home() {
   const [aiAnswer, setAiAnswer] = useState<AiAnswer | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiMessage, setAiMessage] = useState("");
+  const [showChat, setShowChat] = useState(false);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    { role: "assistant", text: "Hello, I’m Hayat. Ask me any Dubai real-estate question and I’ll answer using the controlled knowledge base and official evidence." },
+  ]);
 
   const results = useMemo(() => {
     const terms = topic && !submitted ? topicRules[topic].join(" ") : submitted;
@@ -426,26 +469,29 @@ export default function Home() {
     [factGroups],
   );
   const profile = useMemo(() => {
-    const value = submitted.toLowerCase().replace(/[^\p{L}\p{N}%]+/gu, " ").trim();
-    const ranked = detailProfiles
-      .map((item) => ({
-        item,
-        score: item.terms.reduce((score, term) => {
-          if (value.includes(term)) return score + term.split(" ").length * 10;
-          const termWords = term.split(" ");
-          return score + termWords.filter((word) => value.includes(word)).length * 2;
-        }, 0),
-      }))
-      .sort((a, b) => b.score - a.score);
-    return ranked[0]?.score > 0 ? ranked[0].item : null;
+    return profileForQuery(submitted);
   }, [submitted]);
 
-  async function askAi(question: string) {
+  async function askAi(question: string, chatMode = false) {
     if (!question.trim()) return;
-    setAiLoading(true);
-    setAiAnswer(null);
-    setAiMessage("");
+    if (chatMode) {
+      setChatLoading(true);
+      setChatMessages((messages) => [...messages, { role: "user", text: question }]);
+    } else {
+      setAiLoading(true);
+      setAiAnswer(null);
+      setAiMessage("");
+    }
 
+    const matchedProfile = profileForQuery(question);
+    const curatedEvidence = matchedProfile ? [{
+      id: matchedProfile.title === "Property sale registration" ? "ENT-025-002" : "CONTROLLED-TOPIC-SUMMARY",
+      title: matchedProfile.title,
+      kind: "knowledge-entry" as const,
+      authority: "Dubai Land Department and the mapped official authorities",
+      status: "Controlled answer with official channels",
+      text: profileEvidenceText(matchedProfile),
+    }] : [];
     const entryEvidence = knowledge.entries
       .map((entry) => ({ entry, score: searchScore(entry, question) }))
       .filter((item) => item.score > 0)
@@ -466,15 +512,20 @@ export default function Home() {
       const entry = knowledge.entries.find((candidate) => candidate.id === item.id);
       return entry?.sourceIds || [];
     }));
+    const preferredIds = preferredDocumentIds(matchedProfile);
+    const retrievalQuestion = matchedProfile
+      ? `${question} ${matchedProfile.title} ${matchedProfile.figures.map(([label, value]) => `${label} ${value}`).join(" ")}`
+      : question;
     const documentEvidence = documentCorpus.documents
       .map((document) => ({
         document,
         score:
           textScore(`${document.package} ${document.text}`, question, `${document.sourceId} ${document.title}`) +
-          (mappedSourceIds.has(document.sourceId) ? 120 : 0),
-        passages: bestPassages(document.text, question),
+          (mappedSourceIds.has(document.sourceId) ? 120 : 0) +
+          (preferredIds.has(document.sourceId) ? 500 : 0),
+        passages: bestPassages(document.text, retrievalQuestion),
       }))
-      .filter((item) => item.score > 2 && item.passages.length)
+      .filter((item) => item.score > 2 && (item.passages.length || preferredIds.has(item.document.sourceId)))
       .sort((a, b) => b.score - a.score)
       .slice(0, 6)
       .map(({ document, passages }) => ({
@@ -483,23 +534,44 @@ export default function Home() {
         kind: "official-document" as const,
         authority: document.package,
         status: "Official evidence",
-        text: passages.map(concisePassage).join("\n"),
+        text: passages.length ? passages.map(concisePassage).join("\n") : concisePassage(document.text),
       }));
 
     try {
       const response = await fetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question, evidence: [...entryEvidence, ...documentEvidence] }),
+        body: JSON.stringify({
+          question,
+          evidence: [...curatedEvidence, ...entryEvidence, ...documentEvidence],
+          history: chatMode ? chatMessages.slice(-6).map(({ role, text }) => ({ role, text })) : [],
+        }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Hayat AI is unavailable right now.");
       setAiAnswer(data);
+      if (chatMode) setChatMessages((messages) => [...messages, { role: "assistant", text: data.directAnswer, answer: data }]);
     } catch (error) {
-      setAiMessage(error instanceof Error ? error.message : "Hayat AI is unavailable right now.");
+      const message = error instanceof Error ? error.message : "Hayat AI is unavailable right now.";
+      if (chatMode) setChatMessages((messages) => [...messages, { role: "assistant", text: message }]);
+      else setAiMessage(message);
     } finally {
-      setAiLoading(false);
+      if (chatMode) setChatLoading(false);
+      else setAiLoading(false);
     }
+  }
+
+  function openBrowse() {
+    setShowSections(true);
+    window.setTimeout(() => document.getElementById("browse-sections")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  }
+
+  function sendChat(event: FormEvent) {
+    event.preventDefault();
+    const question = chatInput.trim();
+    if (!question || chatLoading) return;
+    setChatInput("");
+    void askAi(question, true);
   }
 
   function submit(event: FormEvent) {
@@ -535,11 +607,11 @@ export default function Home() {
           </button>
           <nav aria-label="Primary navigation">
             <button className="active" onClick={() => scrollTo({ top: 0, behavior: "smooth" })}>⌂<span>Home</span></button>
-            <button onClick={() => setShowSections(!showSections)}>▤<span>Browse</span></button>
+            <button onClick={openBrowse}>▤<span>Browse</span></button>
+            <button onClick={() => setShowChat(true)}>✦<span>Ask Hayat</span></button>
             <button onClick={() => document.getElementById("sources")?.scrollIntoView({ behavior: "smooth" })}>▧<span>Sources</span></button>
             <button onClick={() => document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" })}>✦<span>Contact</span></button>
           </nav>
-          <span className="checkpoint">V71</span>
         </header>
 
         <div className="hero-content">
@@ -556,6 +628,7 @@ export default function Home() {
             <kbd>↵</kbd>
             <button type="submit" aria-label="Search">⌕</button>
           </form>
+          <button className="hero-ai-button" onClick={() => setShowChat(true)}><span>✦</span> Start chatting with Hayat AI</button>
           <div className="metrics" aria-label="Knowledge base statistics">
             <div><i>▤</i><strong>{knowledge.entryCount.toLocaleString()}</strong><span>knowledge entries</span></div>
             <div><i>♜</i><strong>{knowledge.sourceCount.toLocaleString()}</strong><span>registered sources</span></div>
@@ -582,7 +655,7 @@ export default function Home() {
         </div>
 
         {showSections && (
-          <div className="section-grid">
+          <div className="section-grid" id="browse-sections">
             {knowledge.sections.map((section) => (
               <button key={section.id} onClick={() => { setQuery(section.title); setSubmitted(section.title); setTopic(""); setShowSections(false); void askAi(section.title); }}>
                 <span>{section.id}</span><strong>{section.title}</strong><small>{section.count} entries</small>
@@ -856,21 +929,32 @@ export default function Home() {
           <div className="contact-actions">
             <a className="contact-primary" href="https://wa.me/971585066899?text=Hello%20Hayat%20Luxury%20Properties" target="_blank" rel="noreferrer">WhatsApp us</a>
             <a href="tel:+971585066899">Call +971 58 506 6899</a>
-            <a href="mailto:info@hayatluxuryproperties.com">Email our team</a>
             <a href="mailto:ossama@hayatluxuryproperties.com">Email Osama</a>
           </div>
         </div>
         <div className="office-grid">
           <article>
             <span>Dubai office</span>
-            <h3>Business Bay</h3>
-            <p>Office 1001, B2B Tower<br />Marasi Drive, Business Bay, Dubai</p>
+            <h3>B2B Tower</h3>
+            <dl className="address-list">
+              <div><dt>Emirate</dt><dd>Dubai</dd></div>
+              <div><dt>Area</dt><dd>Business Bay, Marasi Drive</dd></div>
+              <div><dt>Tower</dt><dd>B2B Tower</dd></div>
+              <div><dt>Office</dt><dd>1001</dd></div>
+              <div><dt>Country</dt><dd>United Arab Emirates</dd></div>
+            </dl>
             <a href="https://www.google.com/maps/search/?api=1&query=B2B+Tower+Marasi+Drive+Business+Bay+Dubai" target="_blank" rel="noreferrer">Open in Maps ↗</a>
           </article>
           <article>
             <span>Sharjah office</span>
             <h3>Bin Rashid Tower</h3>
-            <p>Office 606, Bin Rashid Tower<br />Sharjah, United Arab Emirates</p>
+            <dl className="address-list">
+              <div><dt>Emirate</dt><dd>Sharjah</dd></div>
+              <div><dt>Area</dt><dd>Sharjah</dd></div>
+              <div><dt>Tower</dt><dd>Bin Rashid Tower</dd></div>
+              <div><dt>Office</dt><dd>606</dd></div>
+              <div><dt>Country</dt><dd>United Arab Emirates</dd></div>
+            </dl>
             <a href="https://www.google.com/maps/search/?api=1&query=Bin+Rashid+Tower+Sharjah" target="_blank" rel="noreferrer">Open in Maps ↗</a>
           </article>
         </div>
@@ -881,14 +965,42 @@ export default function Home() {
           <img src="/hayat-luxury-logo.png" alt="Hayat Luxury Properties" />
           <span>Where Life Meets Luxury</span>
         </div>
-        <div id="updates"><strong>Dubai Real Estate Knowledge Browser</strong><span>Active checkpoint V71 · Coverage Audit V52</span><span>Controlled information, not transaction-specific legal advice.</span></div>
+        <div id="updates"><strong>Dubai Real Estate Knowledge Browser</strong><span>Controlled knowledge library</span><span>Controlled information, not transaction-specific legal advice.</span></div>
         <div id="about"><strong>Developed by Osama Bakir</strong><a href="mailto:ossama@hayatluxuryproperties.com">ossama@hayatluxuryproperties.com</a><a href="tel:+971585066899">+971 58 506 6899</a></div>
       </footer>
 
-      <a className="floating-whatsapp" href="https://wa.me/971585066899?text=Hello%20Hayat%20Luxury%20Properties" target="_blank" rel="noreferrer" aria-label="Contact Hayat Luxury Properties on WhatsApp">
-        <span>WhatsApp</span>
-        <b>↗</b>
-      </a>
+      <button className="floating-hayat" onClick={() => setShowChat(true)} aria-label="Start chatting with Hayat AI">
+        <span>Chat with Hayat</span><b>✦</b>
+      </button>
+
+      {showChat && (
+        <div className="chat-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowChat(false); }}>
+          <aside className="hayat-chat" aria-label="Chat with Hayat AI">
+            <header>
+              <div><span className="hayat-avatar">H</span><div><strong>Hayat</strong><small>Dubai real-estate AI</small></div></div>
+              <button onClick={() => setShowChat(false)} aria-label="Close chat">×</button>
+            </header>
+            <div className="chat-messages">
+              {chatMessages.map((message, index) => (
+                <article className={`chat-message ${message.role}`} key={`${message.role}-${index}`}>
+                  <span>{message.role === "assistant" ? "Hayat" : "You"}</span>
+                  <p>{message.text}</p>
+                  {message.answer?.figures?.length ? (
+                    <div className="chat-figures">{message.answer.figures.slice(0, 4).map((figure) => <div key={`${figure.label}-${figure.value}`}><small>{figure.label}</small><strong>{figure.value}</strong></div>)}</div>
+                  ) : null}
+                  {message.answer?.sourceIds?.length ? <small className="chat-evidence">Evidence: {message.answer.sourceIds.join(" · ")}</small> : null}
+                </article>
+              ))}
+              {chatLoading && <article className="chat-message assistant typing"><span>Hayat</span><p>Reading the relevant evidence…</p></article>}
+            </div>
+            <form className="chat-form" onSubmit={sendChat}>
+              <textarea value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="Ask Hayat about fees, contracts, rent, sales…" rows={2} />
+              <button type="submit" disabled={chatLoading || !chatInput.trim()}>Send</button>
+            </form>
+            <small className="chat-disclaimer">Answers use controlled knowledge and official evidence. Verify the live authority position for an actual transaction.</small>
+          </aside>
+        </div>
+      )}
     </main>
   );
 }
